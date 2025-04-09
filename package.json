@@ -1,5 +1,19 @@
 {
-  "private": true,
+  "name": "@solana/spl-stake-pool",
+  "version": "1.0.0",
+  "main": "clients/js-legacy/dist/index.cjs.js",
+  "module": "clients/js-legacy/dist/index.esm.js",
+  "types": "clients/js-legacy/dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./clients/js-legacy/dist/index.esm.js",
+      "require": "./clients/js-legacy/dist/index.cjs.js",
+      "types": "./clients/js-legacy/dist/index.d.ts"
+    }
+  },
+  "files": [
+    "clients/js-legacy/dist"
+  ],
   "scripts": {
     "programs:build": "zx ./scripts/rust/build-sbf.mjs program",
     "programs:test": "zx ./scripts/rust/test-sbf.mjs program",
