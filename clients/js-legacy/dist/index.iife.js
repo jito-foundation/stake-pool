@@ -8013,12 +8013,8 @@ var solanaStakePool = (function (exports) {
 		    var b256 = new Uint8Array(size);
 		        // Process the characters.
 		    while (psz < source.length) {
-		            // Find code of next character
-		      var charCode = source.charCodeAt(psz);
-		            // Base map can not be indexed using char code
-		      if (charCode > 255) { return }
 		            // Decode character
-		      var carry = BASE_MAP[charCode];
+		      var carry = BASE_MAP[source.charCodeAt(psz)];
 		            // Invalid character
 		      if (carry === 255) { return }
 		      var i = 0;
@@ -20935,7 +20931,11 @@ var solanaStakePool = (function (exports) {
 	            if (lamports.lte(minBalance) && type == 'transient') {
 	                continue;
 	            }
-	            let availableForWithdrawal = calcPoolTokensForDeposit(stakePool, lamports);
+	            // For non-reserve accounts, cap available lamports to leave minBalance behind.
+	            // The on-chain program requires either withdrawing everything (leaving 0) or
+	            // leaving at least minBalance (rent exemption + MINIMUM_ACTIVE_STAKE).
+	            const effectiveLamports = type === 'reserve' ? lamports : BN.max(lamports.sub(minBalance), new BN(0));
+	            let availableForWithdrawal = calcPoolTokensForDeposit(stakePool, effectiveLamports);
 	            if (!skipFee && !inverseFee.numerator.isZero()) {
 	                availableForWithdrawal = availableForWithdrawal
 	                    .mul(inverseFee.denominator)

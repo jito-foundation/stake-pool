@@ -812,7 +812,11 @@ async function prepareWithdrawAccounts(connection, stakePool, stakePoolAddress, 
             if (lamports.lte(minBalance) && type == 'transient') {
                 continue;
             }
-            let availableForWithdrawal = calcPoolTokensForDeposit(stakePool, lamports);
+            // For non-reserve accounts, cap available lamports to leave minBalance behind.
+            // The on-chain program requires either withdrawing everything (leaving 0) or
+            // leaving at least minBalance (rent exemption + MINIMUM_ACTIVE_STAKE).
+            const effectiveLamports = type === 'reserve' ? lamports : BN.max(lamports.sub(minBalance), new BN(0));
+            let availableForWithdrawal = calcPoolTokensForDeposit(stakePool, effectiveLamports);
             if (!skipFee && !inverseFee.numerator.isZero()) {
                 availableForWithdrawal = availableForWithdrawal
                     .mul(inverseFee.denominator)
