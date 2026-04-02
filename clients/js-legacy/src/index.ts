@@ -266,6 +266,7 @@ export async function depositSol(
   referrerTokenAccount?: PublicKey,
   depositAuthority?: PublicKey,
   skipLamportsCheck?: boolean,
+  skipEphemeralTransfer?: boolean,
 ) {
   const fromBalance = await connection.getBalance(from, 'confirmed');
   if (!skipLamportsCheck && fromBalance < lamports) {
@@ -279,19 +280,27 @@ export async function depositSol(
   const stakePoolAccount = await getStakePoolAccount(connection, stakePoolAddress);
   const stakePool = stakePoolAccount.account.data;
 
-  // Ephemeral SOL account just to do the transfer
-  const userSolTransfer = new Keypair();
-  const signers: Signer[] = [userSolTransfer];
+  const signers: Signer[] = [];
   const instructions: TransactionInstruction[] = [];
+  let fundingAccount: PublicKey;
 
-  // Create the ephemeral SOL account
-  instructions.push(
-    SystemProgram.transfer({
-      fromPubkey: from,
-      toPubkey: userSolTransfer.publicKey,
-      lamports,
-    }),
-  );
+  if (skipEphemeralTransfer) {
+    // For PDA/multisig wallets (e.g. Squads) — use `from` directly as the
+    // funding account. The wallet adapter handles signing for the PDA.
+    fundingAccount = from;
+  } else {
+    // Ephemeral SOL account just to do the transfer
+    const userSolTransfer = new Keypair();
+    signers.push(userSolTransfer);
+    fundingAccount = userSolTransfer.publicKey;
+    instructions.push(
+      SystemProgram.transfer({
+        fromPubkey: from,
+        toPubkey: userSolTransfer.publicKey,
+        lamports,
+      }),
+    );
+  }
 
   // Create token account if not specified
   if (!destinationTokenAccount) {
@@ -316,7 +325,7 @@ export async function depositSol(
     StakePoolInstruction.depositSol({
       stakePool: stakePoolAddress,
       reserveStake: stakePool.reserveStake,
-      fundingAccount: userSolTransfer.publicKey,
+      fundingAccount,
       destinationPoolAccount: destinationTokenAccount,
       managerFeeAccount: stakePool.managerFeeAccount,
       referralPoolAccount: referrerTokenAccount ?? destinationTokenAccount,

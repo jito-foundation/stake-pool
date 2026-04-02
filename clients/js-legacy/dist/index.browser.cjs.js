@@ -1699,23 +1699,32 @@ async function depositStake(connection, stakePoolAddress, authorizedPubkey, vali
 /**
  * Creates instructions required to deposit sol to stake pool.
  */
-async function depositSol(connection, stakePoolAddress, from, lamports, destinationTokenAccount, referrerTokenAccount, depositAuthority, skipLamportsCheck) {
+async function depositSol(connection, stakePoolAddress, from, lamports, destinationTokenAccount, referrerTokenAccount, depositAuthority, skipLamportsCheck, skipEphemeralTransfer) {
     const fromBalance = await connection.getBalance(from, 'confirmed');
     if (!skipLamportsCheck && fromBalance < lamports) {
         throw new Error(`Not enough SOL to deposit into pool. Maximum deposit amount is ${lamportsToSol(fromBalance)} SOL.`);
     }
     const stakePoolAccount = await getStakePoolAccount(connection, stakePoolAddress);
     const stakePool = stakePoolAccount.account.data;
-    // Ephemeral SOL account just to do the transfer
-    const userSolTransfer = new web3_js.Keypair();
-    const signers = [userSolTransfer];
+    const signers = [];
     const instructions = [];
-    // Create the ephemeral SOL account
-    instructions.push(web3_js.SystemProgram.transfer({
-        fromPubkey: from,
-        toPubkey: userSolTransfer.publicKey,
-        lamports,
-    }));
+    let fundingAccount;
+    if (skipEphemeralTransfer) {
+        // For PDA/multisig wallets (e.g. Squads) — use `from` directly as the
+        // funding account. The wallet adapter handles signing for the PDA.
+        fundingAccount = from;
+    }
+    else {
+        // Ephemeral SOL account just to do the transfer
+        const userSolTransfer = new web3_js.Keypair();
+        signers.push(userSolTransfer);
+        fundingAccount = userSolTransfer.publicKey;
+        instructions.push(web3_js.SystemProgram.transfer({
+            fromPubkey: from,
+            toPubkey: userSolTransfer.publicKey,
+            lamports,
+        }));
+    }
     // Create token account if not specified
     if (!destinationTokenAccount) {
         const associatedAddress = splToken.getAssociatedTokenAddressSync(stakePool.poolMint, from, true);
@@ -1726,7 +1735,7 @@ async function depositSol(connection, stakePoolAddress, from, lamports, destinat
     instructions.push(StakePoolInstruction.depositSol({
         stakePool: stakePoolAddress,
         reserveStake: stakePool.reserveStake,
-        fundingAccount: userSolTransfer.publicKey,
+        fundingAccount,
         destinationPoolAccount: destinationTokenAccount,
         managerFeeAccount: stakePool.managerFeeAccount,
         referralPoolAccount: referrerTokenAccount !== null && referrerTokenAccount !== void 0 ? referrerTokenAccount : destinationTokenAccount,
